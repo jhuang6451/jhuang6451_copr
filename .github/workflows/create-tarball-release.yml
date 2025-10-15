@@ -116,7 +116,7 @@ jobs:
           COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
           COPR_USERNAME: ${{ secrets.COPR_USERNAME }}
           COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
-          COPR_URL: ${{ secrets.COPR_API_URL }}
+          COPR_URL: ${{ secrets.COPR_URL }}
           COPR_PROJECT: ${{ secrets.COPR_PROJECT }}
 
           # 脚本内部需要的构建参数
