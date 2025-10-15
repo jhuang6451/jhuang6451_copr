@@ -5,7 +5,7 @@ Version:        3.4.0
 Release:        1%{?dist}
 Summary:        UbuntuMono Nerd Fonts
 BuildArch:      noarch
-License:        MIT
+License:        unknown
 URL:            https://github.com/ryanoasis/nerd-fonts
 Source0:        %{url}/releases/download/v%{version}/UbuntuMono.tar.xz
 
@@ -36,7 +36,7 @@ fi
 %files
 %defattr(644, root, root, 755)
 /usr/share/fonts/%{name}
-%license LICENSE
+%license LICENSE.txt
 
 %changelog
 * Wed Oct 15 2025 jhuang6451 <xplayerhtz123@outlook.com> - 3.4.0-1
