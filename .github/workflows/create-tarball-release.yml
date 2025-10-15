@@ -24,10 +24,13 @@ jobs:
       - name: Check for version or release changes in all packages
         id: check_version
         run: |
+          # set -x
+
           if [ ! -f .release ]; then
             echo ".release file not found!"
             exit 1
           fi
+
           changed_packages="[]"
           while IFS= read -r pkg_name || [[ -n "$pkg_name" ]]; do
             if [ -z "$pkg_name" ]; then
@@ -40,20 +43,26 @@ jobs:
               continue
             fi
 
-            # 从当前 spec 文件中提取 Version 和 Release
-            VERSION=$(grep -m 1 '^Version:' "$SPEC_FILE" | awk '{print $2}')
-            RELEASE=$(grep -m 1 '^Release:' "$SPEC_FILE" | awk '{print $2}')
+            # -F': *' 使用冒号和可选的空格作为分隔符
+            VERSION=$(awk -F': *' '/^Version:/ {print $2; exit}' "$SPEC_FILE")
+            RELEASE=$(awk -F': *' '/^Release:/ {print $2; exit}' "$SPEC_FILE")
 
-            # 从上一个 commit 的 spec 文件中提取 Version 和 Release
+            # 从上一个 commit 获取 spec 文件内容
             PREV_SPEC_CONTENT=$(git show HEAD~1:"$SPEC_FILE" 2>/dev/null)
-            PREV_VERSION=$(echo "$PREV_SPEC_CONTENT" | grep -m 1 '^Version:' | awk '{print $2}' || echo "0")
-            PREV_RELEASE=$(echo "$PREV_SPEC_CONTENT" | grep -m 1 '^Release:' | awk '{print $2}' || echo "0")
+
+            # 提取上一个版本的 Version 和 Release
+            PREV_VERSION_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Version:/ {print $2; exit}')
+            PREV_RELEASE_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Release:/ {print $2; exit}')
+
+            # 如果上一个版本信息为空（例如，文件是新增的），则设置默认值 "0"
+            PREV_VERSION=${PREV_VERSION_RAW:-"0"}
+            PREV_RELEASE=${PREV_RELEASE_RAW:-"0"}
 
             echo "Current: Version=${VERSION}, Release=${RELEASE}"
             echo "Previous: Version=${PREV_VERSION}, Release=${PREV_RELEASE}"
 
-            # 检查 Version 或 Release 是否发生变化
-            if ([ "$VERSION" != "$PREV_VERSION" ] || [ "$RELEASE" != "$PREV_RELEASE" ]) && [ -n "$VERSION" ]; then
+            # 检查 Version 或 Release 是否发生变化 (同时确保当前 Version 不为空)
+            if [ -n "$VERSION" ] && { [ "$VERSION" != "$PREV_VERSION" ] || [ "$RELEASE" != "$PREV_RELEASE" ]; }; then
               FULL_VERSION="${VERSION}-${RELEASE}"
               echo "Version or Release changed for $pkg_name: ${PREV_VERSION}-${PREV_RELEASE} -> ${FULL_VERSION}"
               changed_packages=$(echo "$changed_packages" | jq -c --arg name "$pkg_name" --arg ver "$FULL_VERSION" '. + [{"name": $name, "version": $ver}]')
@@ -61,7 +70,8 @@ jobs:
               echo "Version and Release have not changed for $pkg_name."
             fi
           done < .release
-          echo "changed_packages=${changed_packages}" >> $GITHUB_OUTPUT```
+          echo "changed_packages=${changed_packages}" >> $GITHUB_OUTPUT
+        shell: bash
 
   # release:
   #   needs: detect-changes
