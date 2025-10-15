@@ -176,11 +176,10 @@ jobs:
           COPR_PROJECT: ${{ secrets.COPR_PROJECT }}
 
           # 脚本内部需要的构建参数
-          CLONE_URL: "https://github.com/jhuang6451/nabu_fedora_packages.git"
+          CLONE_URL: "https://github.com/jhuang6451/jhuang6451_copr.git"
           COMMITTISH: ${{ github.ref_name }}
           SUBDIRECTORY: ${{ matrix.package.name }}
           SPEC: ${{ matrix.package.name }}.spec
-          COPR_REPO: ${{ github.ref_name == 'test' && 'nabu_fedora_packages_test' || 'nabu_fedora_packages' }}
         run: |
           echo "Triggering build for ${{ matrix.package.name }} version ${{ matrix.package.version }}"
           chmod +x ./scripts/trigger-copr-build.sh

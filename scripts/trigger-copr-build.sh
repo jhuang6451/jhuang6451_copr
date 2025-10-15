@@ -22,8 +22,8 @@ echo "--> Verifying copr identity..."
 copr-cli whoami
 
 # 这些变量将由 GitHub Actions 的 env 上下文提供
-# 例如：CLONE_URL, COMMITTISH, SUBDIRECTORY, SPEC, COPR_REPO
-echo "--> Triggering Copr build in repo '${COPR_REPO}' for package '${SUBDIRECTORY}'..."
+# 例如：CLONE_URL, COMMITTISH, SUBDIRECTORY, SPEC, COPR_PROJECT
+echo "--> Triggering Copr build in repo '${COPR_PROJECT}' for package '${SUBDIRECTORY}'..."
 copr-cli buildscm \
   --clone-url "${CLONE_URL}" \
   --commit "${COMMITTISH}" \
@@ -32,6 +32,6 @@ copr-cli buildscm \
   --type git \
   --method rpkg \
   --nowait \
-  "${COPR_REPO}"
+  "${COPR_PROJECT}"
 
 echo "--> Copr build triggered successfully for ${SUBDIRECTORY}."
