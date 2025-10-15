@@ -169,16 +169,13 @@ jobs:
           COPR_URL: ${{ secrets.COPR_URL }}
           COPR_PROJECT: ${{ secrets.COPR_PROJECT }}
 
-          CLONE_URL: "https://github.com/jhuang6451/nabu_fedora_packages.git"
+          CLONE_URL: "https://github.com/jhuang6451/jhuang6451_copr.git"
           COMMITTISH: ${{ github.ref_name }}
-          
           # --- UPDATED: 使用 matrix 中的 path 和 name ---
           # SUBDIRECTORY 需要完整的路径, e.g., "nerd-fonts/agave"
           SUBDIRECTORY: ${{ matrix.package.path }}
           # SPEC 只需要包名, e.g., "agave.spec"
           SPEC: ${{ matrix.package.name }}.spec
-          
-          COPR_REPO: ${{ github.ref_name == 'test' && 'nabu_fedora_packages_test' || 'nabu_fedora_packages' }}
         run: |
           echo "Triggering build for ${{ matrix.package.name }} (from path: ${{ matrix.package.path }}) version ${{ matrix.package.version }}"
           chmod +x ./scripts/trigger-copr-build.sh
