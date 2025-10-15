@@ -1,6 +1,6 @@
 Name:           e-thos-menu
 Version:        0.3.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Launcher-driven managers for Linux by e-tho
 
 License:        GPL-3.0-or-later
@@ -34,9 +34,20 @@ this spec file simply downloads the pre-built executables from github release an
 
 %install
 install -d %{buildroot}%{_bindir}
+
+# 如果构建架构是 x86_64，使用 Source 0-2
+%ifarch x86_64
 install -p -m 755 %{SOURCE0} %{buildroot}%{_bindir}/bzmenu
 install -p -m 755 %{SOURCE1} %{buildroot}%{_bindir}/iwmenu
 install -p -m 755 %{SOURCE2} %{buildroot}%{_bindir}/pwmenu
+%endif
+
+# 如果构建架构是 aarch64，使用 Source 3-5
+%ifarch aarch64
+install -p -m 755 %{SOURCE3} %{buildroot}%{_bindir}/bzmenu
+install -p -m 755 %{SOURCE4} %{buildroot}%{_bindir}/iwmenu
+install -p -m 755 %{SOURCE5} %{buildroot}%{_bindir}/pwmenu
+%endif
 
 %files
 %defattr(-,root,root,-)
@@ -45,5 +56,8 @@ install -p -m 755 %{SOURCE2} %{buildroot}%{_bindir}/pwmenu
 %{_bindir}/pwmenu
 
 %changelog
+* Tur Oct 16 2025 jhuang6451 <xplayerhtz123@outlook.com> - 0.3.0-2
+- Install binary base on arch.
+
 * Wed Oct 15 2025 jhuang6451 <xplayerhtz123@outlook.com> - 0.3.0-1
-- Initial release for v0.3.0
+- Initial release for v0.3.0.
