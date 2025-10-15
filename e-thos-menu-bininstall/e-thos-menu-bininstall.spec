@@ -1,7 +1,3 @@
-%global bz_binname bzmenu-%{_arch}-linux-gnu
-%global iw_binname iwmenu-%{_arch}-linux-gnu
-%global pw_binname pwmenu-%{_arch}-linux-gnu
-
 Name:           e-thos-menu
 Version:        0.3.0
 Release:        1%{?dist}
@@ -9,15 +5,21 @@ Summary:        Launcher-driven managers for Linux by e-tho
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/e-tho
-Source0:        %{url}/bzmenu/releases/download/v%{version}/%{bz_binname}
-Source1:        %{url}/iwmenu/releases/download/v%{version}/%{iw_binname}
-Source2:        %{url}/pwmenu/releases/download/v%{version}/%{pw_binname}
+Source0:        %{url}/bzmenu/releases/download/v%{version}/bzmenu-x86_64-linux-gnu
+Source1:        %{url}/iwmenu/releases/download/v%{version}/iwmenu-x86_64-linux-gnu
+Source2:        %{url}/pwmenu/releases/download/v%{version}/pwmenu-x86_64-linux-gnu
+Source3:        %{url}/bzmenu/releases/download/v%{version}/bzmenu-aarch64-linux-gnu
+Source4:        %{url}/iwmenu/releases/download/v%{version}/iwmenu-aarch64-linux-gnu
+Source5:        %{url}/pwmenu/releases/download/v%{version}/pwmenu-aarch64-linux-gnu
 
 # Runtime dependencies
 Requires:       bluez
 Requires:       iwd
 Requires:       pipewire
 Requires:       dbus
+
+%global debug_package %{nil}
+%global __os_install_post %{nil}
 
 %description
 bzmenu (BlueZ Menu) manages Bluetooth through your launcher of choice (like rofi, dmenu, or fuzzel).
