@@ -1,0 +1,130 @@
+name: Trigger Build for Updated Packages
+
+on:
+  push:
+    branches:
+      - "release"
+      - "test"
+    paths:
+      - '**/*.spec'
+      - '.release'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed_packages: ${{ steps.check_version.outputs.changed_packages }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 2
+
+      - name: Check for version or release changes in all packages
+        id: check_version
+        run: |
+          if [ ! -f .release ]; then
+            echo ".release file not found!"
+            exit 1
+          fi
+          changed_packages="[]"
+          while IFS= read -r pkg_name || [[ -n "$pkg_name" ]]; do
+            if [ -z "$pkg_name" ]; then
+              continue
+            fi
+            echo "Checking package: $pkg_name"
+            SPEC_FILE="${pkg_name}/${pkg_name}.spec"
+            if [ ! -f "$SPEC_FILE" ]; then
+              echo "Spec file not found for $pkg_name at $SPEC_FILE. Skipping."
+              continue
+            fi
+
+            # 从当前 spec 文件中提取 Version 和 Release
+            VERSION=$(grep -m 1 '^Version:' "$SPEC_FILE" | awk '{print $2}')
+            RELEASE=$(grep -m 1 '^Release:' "$SPEC_FILE" | awk '{print $2}')
+
+            # 从上一个 commit 的 spec 文件中提取 Version 和 Release
+            PREV_SPEC_CONTENT=$(git show HEAD~1:"$SPEC_FILE" 2>/dev/null)
+            PREV_VERSION=$(echo "$PREV_SPEC_CONTENT" | grep -m 1 '^Version:' | awk '{print $2}' || echo "0")
+            PREV_RELEASE=$(echo "$PREV_SPEC_CONTENT" | grep -m 1 '^Release:' | awk '{print $2}' || echo "0")
+
+            echo "Current: Version=${VERSION}, Release=${RELEASE}"
+            echo "Previous: Version=${PREV_VERSION}, Release=${PREV_RELEASE}"
+
+            # 检查 Version 或 Release 是否发生变化
+            if ([ "$VERSION" != "$PREV_VERSION" ] || [ "$RELEASE" != "$PREV_RELEASE" ]) && [ -n "$VERSION" ]; then
+              FULL_VERSION="${VERSION}-${RELEASE}"
+              echo "Version or Release changed for $pkg_name: ${PREV_VERSION}-${PREV_RELEASE} -> ${FULL_VERSION}"
+              changed_packages=$(echo "$changed_packages" | jq -c --arg name "$pkg_name" --arg ver "$FULL_VERSION" '. + [{"name": $name, "version": $ver}]')
+            else
+              echo "Version and Release have not changed for $pkg_name."
+            fi
+          done < .release
+          echo "changed_packages=${changed_packages}" >> $GITHUB_OUTPUT```
+
+  # release:
+  #   needs: detect-changes
+  #   if: fromJson(needs.detect-changes.outputs.changed_packages)[0] != null
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       package: ${{ fromJson(needs.detect-changes.outputs.changed_packages) }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+
+  #     - name: Create Tarball for ${{ matrix.package.name }}
+  #       id: create_tarball
+  #       run: |
+  #         PKG_NAME="${{ matrix.package.name }}"
+  #         VERSION="${{ matrix.package.version }}"
+  #         DIR_NAME="${PKG_NAME}-${VERSION}"
+  #         TARBALL_NAME="${DIR_NAME}.tar.gz"
+  #         echo "Packaging $PKG_NAME version $VERSION"
+  #         mv "$PKG_NAME" "$DIR_NAME"
+  #         tar --exclude-vcs -czvf "$TARBALL_NAME" "$DIR_NAME"
+  #         mv "$DIR_NAME" "$PKG_NAME"
+  #         echo "Created tarball: $TARBALL_NAME"
+  #         echo "tarball_name=$TARBALL_NAME" >> $GITHUB_OUTPUT
+
+  #     - name: Create GitHub Release for ${{ matrix.package.name }}
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         tag_name: ${{ github.ref_name == 'test' && format('test-{0}-{1}', matrix.package.name, matrix.package.version) || format('{0}-{1}', matrix.package.name, matrix.package.version) }}
+  #         files: ${{ steps.create_tarball.outputs.tarball_name }}
+  #         name: Release ${{ matrix.package.name }} ${{ matrix.package.version }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trigger-copr-build:
+    # needs: [detect-changes, release]
+    needs: [detect-changes]
+    if: fromJson(needs.detect-changes.outputs.changed_packages)[0] != null
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.detect-changes.outputs.changed_packages) }}
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Trigger Copr Build for ${{ matrix.package.name }}
+        env:
+          COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
+          COPR_USERNAME: ${{ secrets.COPR_USERNAME }}
+          COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
+          COPR_URL: ${{ secrets.COPR_API_URL }}
+          COPR_PROJECT: ${{ secrets.COPR_PROJECT }}
+
+          # 脚本内部需要的构建参数
+          CLONE_URL: "https://github.com/jhuang6451/nabu_fedora_packages.git"
+          COMMITTISH: ${{ github.ref_name }}
+          SUBDIRECTORY: ${{ matrix.package.name }}
+          SPEC: ${{ matrix.package.name }}.spec
+          COPR_REPO: ${{ github.ref_name == 'test' && 'nabu_fedora_packages_test' || 'nabu_fedora_packages' }}
+        run: |
+          chmod +x ./scripts/trigger-copr-build.sh
+          ./scripts/trigger-copr-build.sh
