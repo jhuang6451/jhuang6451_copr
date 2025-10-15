@@ -1,6 +1,13 @@
-name: Trigger Build for Updated Packages
+name: Trigger Build for Packages
 
 on:
+  # 添加手动触发
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual trigger'
+        required: false
+        default: 'Manual rebuild of all packages in .release'
   push:
     branches:
       - "release"
@@ -13,16 +20,18 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      changed_packages: ${{ steps.check_version.outputs.changed_packages }}
+      changed_packages: ${{ steps.process_packages.outputs.build_list }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+          # 如果是 push 事件，我们需要比较上一个 commit，所以 depth 为 2
+          # 如果是手动触发，depth 1 就够了，但保持 2也没问题
           fetch-depth: 2
 
-      - name: Check for version or release changes in all packages
-        id: check_version
+      - name: Determine packages to build
+        id: process_packages
         run: |
           # set -x
 
@@ -30,47 +39,82 @@ jobs:
             echo ".release file not found!"
             exit 1
           fi
+          
+          EVENT_NAME="${{ github.event_name }}"
+          echo "Trigger event: $EVENT_NAME"
 
-          changed_packages="[]"
+          build_list="[]"
+          
           while IFS= read -r pkg_name || [[ -n "$pkg_name" ]]; do
-            if [ -z "$pkg_name" ]; then
+            # 去除可能的空白字符
+            pkg_name=$(echo "$pkg_name" | xargs)
+            if [ -z "$pkg_name" ] || [[ "$pkg_name" == \#* ]]; then
               continue
             fi
-            echo "Checking package: $pkg_name"
+
+            echo "---------------------------------"
+            echo "Processing package: $pkg_name"
             SPEC_FILE="${pkg_name}/${pkg_name}.spec"
             if [ ! -f "$SPEC_FILE" ]; then
-              echo "Spec file not found for $pkg_name at $SPEC_FILE. Skipping."
+              echo "::warning::Spec file not found for $pkg_name at $SPEC_FILE. Skipping."
               continue
             fi
 
+            # 获取当前文件的 Version 和 Release
             # -F': *' 使用冒号和可选的空格作为分隔符
             VERSION=$(awk -F': *' '/^Version:/ {print $2; exit}' "$SPEC_FILE")
             RELEASE=$(awk -F': *' '/^Release:/ {print $2; exit}' "$SPEC_FILE")
-
-            # 从上一个 commit 获取 spec 文件内容
-            PREV_SPEC_CONTENT=$(git show HEAD~1:"$SPEC_FILE" 2>/dev/null)
-
-            # 提取上一个版本的 Version 和 Release
-            PREV_VERSION_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Version:/ {print $2; exit}')
-            PREV_RELEASE_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Release:/ {print $2; exit}')
-
-            # 如果上一个版本信息为空（例如，文件是新增的），则设置默认值 "0"
-            PREV_VERSION=${PREV_VERSION_RAW:-"0"}
-            PREV_RELEASE=${PREV_RELEASE_RAW:-"0"}
-
-            echo "Current: Version=${VERSION}, Release=${RELEASE}"
-            echo "Previous: Version=${PREV_VERSION}, Release=${PREV_RELEASE}"
-
-            # 检查 Version 或 Release 是否发生变化 (同时确保当前 Version 不为空)
-            if [ -n "$VERSION" ] && { [ "$VERSION" != "$PREV_VERSION" ] || [ "$RELEASE" != "$PREV_RELEASE" ]; }; then
-              FULL_VERSION="${VERSION}-${RELEASE}"
-              echo "Version or Release changed for $pkg_name: ${PREV_VERSION}-${PREV_RELEASE} -> ${FULL_VERSION}"
-              changed_packages=$(echo "$changed_packages" | jq -c --arg name "$pkg_name" --arg ver "$FULL_VERSION" '. + [{"name": $name, "version": $ver}]')
-            else
-              echo "Version and Release have not changed for $pkg_name."
+            
+            if [ -z "$VERSION" ]; then
+              echo "::error::Could not parse Version from $SPEC_FILE. Skipping."
+              continue
             fi
+            
+            FULL_VERSION="${VERSION}-${RELEASE}"
+            SHOULD_BUILD=false
+
+            # --- 逻辑分支开始 ---
+            if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+              # 1. 手动触发模式：构建 .release 中的所有包
+              echo "Manual trigger detected. Adding $pkg_name ($FULL_VERSION) to build list."
+              SHOULD_BUILD=true
+            else
+              # 2. Push 触发模式：检查版本变化
+              
+              # 从上一个 commit 获取 spec 文件内容
+              PREV_SPEC_CONTENT=$(git show HEAD~1:"$SPEC_FILE" 2>/dev/null)
+
+              # 提取上一个版本的 Version 和 Release
+              PREV_VERSION_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Version:/ {print $2; exit}')
+              PREV_RELEASE_RAW=$(echo "$PREV_SPEC_CONTENT" | awk -F': *' '/^Release:/ {print $2; exit}')
+
+              # 如果上一个版本信息为空（例如，文件是新增的），则设置默认值 "0"
+              PREV_VERSION=${PREV_VERSION_RAW:-"0"}
+              PREV_RELEASE=${PREV_RELEASE_RAW:-"0"}
+
+              echo "Current:  Version=${VERSION}, Release=${RELEASE}"
+              echo "Previous: Version=${PREV_VERSION}, Release=${PREV_RELEASE}"
+
+              # 检查 Version 或 Release 是否发生变化
+              if [ "$VERSION" != "$PREV_VERSION" ] || [ "$RELEASE" != "$PREV_RELEASE" ]; then
+                echo "Version change detected: ${PREV_VERSION}-${PREV_RELEASE} -> ${FULL_VERSION}"
+                SHOULD_BUILD=true
+              else
+                echo "No version change for $pkg_name."
+              fi
+            fi
+            # --- 逻辑分支结束 ---
+
+            # 如果需要构建，添加到 JSON 数组
+            if [ "$SHOULD_BUILD" == "true" ]; then
+              build_list=$(echo "$build_list" | jq -c --arg name "$pkg_name" --arg ver "$FULL_VERSION" '. + [{"name": $name, "version": $ver}]')
+            fi
+
           done < .release
-          echo "changed_packages=${changed_packages}" >> $GITHUB_OUTPUT
+
+          echo "Final build list: $build_list"
+          # 设置 output，改名为 build_list 以反映它不仅仅是 changed
+          echo "build_list=${build_list}" >> $GITHUB_OUTPUT
         shell: bash
 
   # release:
@@ -108,13 +152,15 @@ jobs:
   #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   trigger-copr-build:
-    # needs: [detect-changes, release]
     needs: [detect-changes]
+    # 检查列表是否为空 (注意：这里引用的是新的 output 名称 build_list)
     if: fromJson(needs.detect-changes.outputs.changed_packages)[0] != null
     runs-on: ubuntu-latest
     container:
       image: fedora:42
     strategy:
+      # 失败一个不影响其他包的构建触发
+      fail-fast: false
       matrix:
         package: ${{ fromJson(needs.detect-changes.outputs.changed_packages) }}
     steps:
@@ -136,5 +182,6 @@ jobs:
           SPEC: ${{ matrix.package.name }}.spec
           COPR_REPO: ${{ github.ref_name == 'test' && 'nabu_fedora_packages_test' || 'nabu_fedora_packages' }}
         run: |
+          echo "Triggering build for ${{ matrix.package.name }} version ${{ matrix.package.version }}"
           chmod +x ./scripts/trigger-copr-build.sh
           ./scripts/trigger-copr-build.sh
