@@ -2,7 +2,7 @@
 
 Name:           maple-mono-normal-nf-cn
 Version:        7.7
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Maple Mono nerd font normal version (unhinted, full CN)
 BuildArch:      noarch
 License:        OFL-1.1
@@ -28,11 +28,11 @@ mkdir -p %{buildroot}/usr/share/fonts/%{name}
 install -m 644 -p *.ttf %{buildroot}/usr/share/fonts/%{name}
 
 %post
-fc-cache -f -v %{_fontdir}/%{name} || :
+fc-cache -f -v || :
 
 %postun
 if [ $1 -eq 0 ] ; then
-    fc-cache -f -v %{_fontdir}/%{name} || :
+    fc-cache -f -v || :
 fi
 
 %files

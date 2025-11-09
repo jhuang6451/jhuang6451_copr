@@ -2,7 +2,7 @@
 
 Name:           ubuntu-mono-nf
 Version:        3.4.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        UbuntuMono Nerd Fonts
 BuildArch:      noarch
 License:        unknown
@@ -26,11 +26,11 @@ mkdir -p %{buildroot}/usr/share/fonts/%{name}
 install -m 644 -p *.ttf %{buildroot}/usr/share/fonts/%{name}
 
 %post
-fc-cache -f -v %{_fontdir}/%{name} || :
+fc-cache -f -v || :
 
 %postun
 if [ $1 -eq 0 ] ; then
-    fc-cache -f -v %{_fontdir}/%{name} || :
+    fc-cache -f -v || :
 fi
 
 %files
